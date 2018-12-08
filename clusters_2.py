@@ -10,6 +10,8 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_samples
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
+from sklearn.metrics import confusion_matrix
+
 from sklearn.model_selection import cross_validate
 from pandas.plotting import parallel_coordinates
 from scipy.spatial.distance import cdist
@@ -96,8 +98,8 @@ def plot_silhouette(model,n_clusters,features,name):
         directory = "kmeans_silhouette/"
     elif(model == "gauss_mix"):
         gauss_mix = GaussianMixture(n_components=n_clusters).fit(features)
-        y = gauss_mix.Predict(features)
-        silhouette_vals = silhouette_samples(features,gauss_mix.means_,metric="euclidean")
+        y = gauss_mix.predict(features)
+        silhouette_vals = silhouette_samples(features,gauss_mix.predict(features),metric="euclidean")
         directory = "gauss_silhouette/"
     else:
         print("Model type not recognized!")
@@ -168,6 +170,33 @@ def categorize_waves(features,waveforms):
                 axes[j,k].plot(sample_waveforms[j+5*k])
         plt.savefig(plots_dir + "waveforms/Cluster_" + str(i) + "_Waveforms.png")
 
+def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    plt.show()
+
 
 
 
@@ -184,8 +213,9 @@ features = pd.DataFrame(u.T[0:3].T,columns=["u0","u1","u2"])
 kmeans = cluster_train(features,n_clusters=4,method="kmeans")
 gauss_mix = cluster_train(features,n_clusters=4,method="gauss_mix")
 
+plot_silhouette("gauss_mix",n_clusters=4,features=features,name="gauss_final")
+
 features["gauss_labels"] = gauss_mix.predict(features)
-print(kmeans.labels_)
 features["k_labels"] = kmeans.labels_
 colors = ["red","blue","green","purple"]
 #categorize_waves(features,waves)
@@ -208,6 +238,15 @@ cv_results_k = cross_validate(forest,features[["u0","u1","u2"]],features["k_labe
 cv_results_gauss = cross_validate(forest,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
 cv_SVM_k = cross_validate(SVM,features[["u0","u1","u2"]],features["k_labels"],cv=2)
 cv_SVM_gauss = cross_validate(SVM,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
+
+svm_confusion = confusion_matrix(features["gauss_labels"],cv_SVM_gauss.predict(u.T[0:3].T))
+forest_confusion = confusion_matrix(features["gauss_labels"],cv_results_gauss.predict(u.T[0:3].T))
+
+plot_confusion_matrix(cm=svm_confusion,classes=colors)
+plot_confusion_matrix(cm=forest_confusion,classes=colors)
+
+
+
 print(cv_results_k["test_score"])
 print(cv_results_gauss["test_score"])
 print(cv_SVM_k["test_score"])
