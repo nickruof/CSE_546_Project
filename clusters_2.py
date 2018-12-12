@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import os as os
+import itertools
 
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
@@ -104,7 +105,7 @@ def plot_silhouette(model,n_clusters,features,name):
     else:
         print("Model type not recognized!")
         return
-
+    colors = ["red","blue","green","purple"]
     y_ax_lower, y_ax_upper = 0, 0
     yticks = []
     plt.figure()
@@ -113,7 +114,7 @@ def plot_silhouette(model,n_clusters,features,name):
         c_silhouette_vals = silhouette_vals[y == c]
         c_silhouette_vals.sort()
         y_ax_upper += len(c_silhouette_vals)
-        color = matplotlib.cm.jet(i / n_clusters)
+        color = colors[i] #matplotlib.cm.jet(i / n_clusters)
         plt.barh(range(y_ax_lower, y_ax_upper),
                  c_silhouette_vals,height=1.0,edgecolor="none",color=color)
         yticks.append((y_ax_lower+y_ax_upper)/2)
@@ -123,7 +124,6 @@ def plot_silhouette(model,n_clusters,features,name):
     plt.yticks(yticks,range(0,n_clusters))
     plt.ylabel("Clusters")
     plt.xlabel("Silhouette Coefficient")
-    plt.xlim([0.98,1.005])
     plt.savefig(plots_dir+directory+"sil_"+name+".png")
 
 def plot_features_3D(features,labels,colors):
@@ -210,40 +210,49 @@ norm_params = norm_params.drop(["isEnr","isGood"],axis=1)
 (u,s,v) = np.linalg.svd(norm_params,full_matrices=False)
 features = pd.DataFrame(u.T[0:3].T,columns=["u0","u1","u2"])
 
-kmeans = cluster_train(features,n_clusters=4,method="kmeans")
-gauss_mix = cluster_train(features,n_clusters=4,method="gauss_mix")
+kmeans = cluster_train(features,n_clusters=3,method="kmeans")
+gauss_mix = cluster_train(features,n_clusters=3,method="gauss_mix")
 
-plot_silhouette("gauss_mix",n_clusters=4,features=features,name="gauss_final")
+#plot_silhouette("gauss_mix",n_clusters=4,features=features,name="gauss_final_2")
+
 
 features["gauss_labels"] = gauss_mix.predict(features)
 features["k_labels"] = kmeans.labels_
-colors = ["red","blue","green","purple"]
+colors = ["red","blue","green"]
 #categorize_waves(features,waves)
 
 
 fig = plt.figure()
 ax = Axes3D(fig)
-ax.scatter(features["u0"],features["u1"],features["u2"],edgecolors="w",c=features["gauss_labels"],
+p = ax.scatter(features["u0"],features["u1"],features["u2"],edgecolors="w",c=features["gauss_labels"],
            cmap=matplotlib.colors.ListedColormap(colors))
 ax.set_xlabel("1st Principal Mode")
 ax.set_ylabel("2nd Principal Mode")
 ax.set_zlabel("3rd Principal Mode")
+fig.colorbar(p, fraction=0.046, pad=0.04, ticks=[0,1,2])
 plt.show()
 
 #plot_3D(params,features)
 
+
 SVM = SVC(gamma='auto')
 forest = RandomForestClassifier(n_estimators=100, max_depth=2,random_state=0)
-cv_results_k = cross_validate(forest,features[["u0","u1","u2"]],features["k_labels"],cv=2)
-cv_results_gauss = cross_validate(forest,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
-cv_SVM_k = cross_validate(SVM,features[["u0","u1","u2"]],features["k_labels"],cv=2)
-cv_SVM_gauss = cross_validate(SVM,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
+#cv_results_k = cross_validate(forest,features[["u0","u1","u2"]],features["k_labels"],cv=2)
+#cv_results_gauss = cross_validate(forest,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
+#cv_SVM_k = cross_validate(SVM,features[["u0","u1","u2"]],features["k_labels"],cv=2)
+#cv_SVM_gauss = cross_validate(SVM,features[["u0","u1","u2"]],features["gauss_labels"],cv=2)
+features = features.sample(frac=1).reset_index(drop=True)
+(train, test) = np.split(features[["u0","u1","u2"]],[int(params.shape[0]*0.7)])
+(train_labels, test_labels) = np.split(features["gauss_labels"],[int(params.shape[0]*0.7)])
+SVM.fit(train,train_labels)
+forest.fit(train,train_labels)
 
-svm_confusion = confusion_matrix(features["gauss_labels"],cv_SVM_gauss.predict(u.T[0:3].T))
-forest_confusion = confusion_matrix(features["gauss_labels"],cv_results_gauss.predict(u.T[0:3].T))
 
-plot_confusion_matrix(cm=svm_confusion,classes=colors)
-plot_confusion_matrix(cm=forest_confusion,classes=colors)
+svm_confusion = confusion_matrix(test_labels,SVM.predict(test),labels=[0,1,2])
+forest_confusion = confusion_matrix(test_labels,forest.predict(test),labels=[0,1,2])
+
+plot_confusion_matrix(cm=svm_confusion,classes=colors,normalize=True)
+plot_confusion_matrix(cm=forest_confusion,classes=colors,normalize=True)
 
 
 
